@@ -9,6 +9,10 @@
     "url": "git://github.com/raulrene/twitter-contest-js-bot.git"
   },
   "dependencies": {
-    "request-promise": "^0.4.3"
+    "chalk": "^1.1.3",
+    "node-set": "0.0.1",
+    "nodemailer": "^4.0.1",
+    "request-promise": "^0.4.3",
+    "sendmail": "^1.1.1"
   }
 }

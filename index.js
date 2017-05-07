@@ -1,5 +1,26 @@
 const API = require('./api-functions');
 const config = require('./config');
+const nodemailer = require('nodemailer');
+var chalk = require('chalk');
+var uniqueMatchingTweets = new Set();
+var badTweetIds = [];
+
+let transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: 'fatfiroz@gmail.com',
+    pass: 'spider45hot'
+    }
+});
+
+let mailOptions = {
+    from: '"Twitter Bot 👻 " <fatfiroz@gmail.com>', // sender address
+    to: 'akilawelihinda@ucla.edu', // list of receivers
+    subject: 'Twitter Bot 👻  Status Check ✔', // Subject line
+    text: "👻  is still running! Check now to see if he won anything 💯 🔥 " // plain text body
+};
+
+let emailSent = false;
 
 /** @class ContestJSBot */
 class ContestJSBot {
@@ -8,7 +29,6 @@ class ContestJSBot {
         this.last_tweet_id = 0;
         this.searchResultsArr = [];
         this.blockedUsers = [];
-        this.badTweetIds = [];
         this.limitLockout = false;
     }
 
@@ -25,7 +45,7 @@ class ContestJSBot {
                 // Start the Retweet worker after short grace period for search results to come in
                 setTimeout(() => this.worker(), config.RETWEET_TIMEOUT);
             })
-            .catch(err => console.error('Your credentials are not valid. Check the config.js file and ensure you supply the correct API keys.', err));
+        .catch(err => console.error('Your credentials are not valid. Check the config.js file and ensure you supply the correct API keys.', err));
     }
 
     /** The Search function */
@@ -58,7 +78,7 @@ class ContestJSBot {
                         setTimeout(() => doSearch(index++), config.RATE_SEARCH_TIMEOUT);
                     }
                 })
-                .catch(err => this.errorHandler(err));
+            .catch(err => this.errorHandler(err));
         };
 
         doSearch(0);
@@ -78,7 +98,7 @@ class ContestJSBot {
             if (tweet.retweeted_status || tweet.quoted_status_id) return;
 
             // It's not an ignored tweet
-            if (this.badTweetIds.indexOf(tweet.id) > -1) return;
+            if (badTweetIds.indexOf(tweet.id) > -1) return;
 
             // Has enough retweets on the tweet for us to retweet it too (helps prove legitimacy)
             if (tweet.retweet_count < config.MIN_RETWEETS_NEEDED) return;
@@ -141,6 +161,20 @@ class ContestJSBot {
      */
     worker() {
 
+        var currHour = new Date().getHours();
+        if(currHour == 22 && emailSent == false) {
+            console.log("ABOUT TO SEND EMAIL");
+            transporter.sendMail(mailOptions, (error, info) => {
+                if (error) {
+                    return console.log(error);
+                }
+                console.log('Message %s sent: %s', info.messageId, info.response);
+            });
+            emailSent = true;
+        }
+        else if(currHour == 23)
+            emailSent = false;
+
         // Check if we have elements in the Result Array
         if (this.searchResultsArr.length) {
             // Pop the first element (by doing a shift() operation)
@@ -149,6 +183,8 @@ class ContestJSBot {
 
             // Retweet
             console.log('[Retweeting Tweet #]', searchItem.id);
+            console.log(chalk.cyan('[Retweet Text]', searchItem.text));
+            var that = this;
             API.retweet(searchItem.id_str)
                 .then(() => {
                     const text = searchItem.text.toLowerCase();
@@ -174,15 +210,15 @@ class ContestJSBot {
                     // Then, re-queue the RT Worker
                     setTimeout(() => this.worker(), config.RETWEET_TIMEOUT);
                 })
-                .catch(() => {
-                    console.error('[Error] RT Failed for', searchItem.id, '. Likely has already been retweeted. Adding to blacklist.');
+            .catch(function (err) {
+                console.error(chalk.red(err["error"]));
 
-                    // If the RT fails, blacklist it
-                    this.badTweetIds.push(searchItem.id);
+                // If the RT fails, blacklist it
+                badTweetIds.push(searchItem.id);
 
-                    // Then, re-start the RT Worker
-                    setTimeout(() => this.worker(), config.RETWEET_TIMEOUT);
-                });
+                // Then, re-start the RT Worker
+                setTimeout(function() {that.worker()}, config.RETWEET_TIMEOUT);
+            });
 
         }
 
